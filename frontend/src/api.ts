@@ -1,7 +1,9 @@
 import axios from 'axios';
 import { useAuthStore } from './store';
+import toast from 'react-hot-toast';
 
-const API_URL = 'http://localhost:3000/api';
+// Use environment variable for scalability, fallback to localhost for local dev convenience
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -25,13 +27,21 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Auto-logout on 401 unauthenticated response
+// Response Interceptor: Auto-logout on 401 unauthenticated response and global error toaster
 api.interceptors.response.use(
   (response) => response,
   (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response ? error.response.status : null;
+    const errorMessage = error.response?.data?.error || error.message || 'Terjadi kesalahan pada sistem.';
+
+    if (status === 401) {
       useAuthStore.getState().logout();
+      toast.error('Sesi Anda telah berakhir. Silakan login kembali.');
+    } else {
+      // Display global visual toast notification for any API errors
+      toast.error(errorMessage);
     }
+    
     return Promise.reject(error);
   }
 );

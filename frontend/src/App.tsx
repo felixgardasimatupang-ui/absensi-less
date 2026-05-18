@@ -20,6 +20,7 @@ import {
 import { useAuthStore } from './store';
 import api from './api';
 import type { Role } from './types';
+import { Toaster } from 'react-hot-toast';
 
 // Toast Alert Helper Component
 interface ToastProps {
@@ -95,6 +96,7 @@ export default function App() {
   if (!user) {
     return (
       <div className="auth-container">
+        <Toaster position="top-center" reverseOrder={false} />
         <div className="glass-card auth-card">
           <div className="auth-header">
             <div className="auth-logo">
@@ -209,6 +211,7 @@ export default function App() {
 
   return (
     <div className="dashboard-container">
+      <Toaster position="top-center" reverseOrder={false} />
       {/* Navigation Header bar */}
       <header className="navbar">
         <div className="nav-brand">
