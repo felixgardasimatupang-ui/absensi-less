@@ -1,8 +1,22 @@
 import { Router } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
+import { z } from 'zod';
 
 const router = Router();
+
+// Zod Validation Schemas
+const CreateSessionSchema = z.object({
+  sessionId: z.string().min(1).optional(),
+  classInfo: z.string().min(2, { message: 'Informasi kelas minimal terdiri dari 2 karakter.' })
+});
+
+const SubmitAttendanceSchema = z.object({
+  sessionId: z.string().min(1, { message: 'Session ID wajib diisi.' }),
+  status: z.enum(['hadir', 'izin', 'alpa']).optional().default('hadir'),
+  lat: z.number().optional().nullable(),
+  lng: z.number().optional().nullable()
+});
 
 // BUAT SESI KELAS BARU (Hanya Tutor)
 router.post('/session', authenticate, async (req: AuthRequest, res) => {
@@ -11,11 +25,18 @@ router.post('/session', authenticate, async (req: AuthRequest, res) => {
       return res.status(403).json({ error: 'Hanya tutor yang dapat membuat sesi kelas.' });
     }
 
-    const { sessionId, classInfo } = req.body;
+    // Validate request body
+    const validation = CreateSessionSchema.safeParse(req.body);
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
+      return res.status(400).json({ error: errorMsg });
+    }
+
+    const { sessionId, classInfo } = validation.data;
     
     const session = await prisma.session.create({
       data: {
-        id: sessionId,
+        id: sessionId || undefined, // undefined lets Prisma fall back to @default(uuid())
         tutorId: req.user.id,
         classInfo,
       }
@@ -30,7 +51,14 @@ router.post('/session', authenticate, async (req: AuthRequest, res) => {
 // SUBMIT ABSEN (Siswa Scan QR)
 router.post('/', authenticate, async (req: AuthRequest, res) => {
   try {
-    const { sessionId, status, lat, lng } = req.body;
+    // Validate request body
+    const validation = SubmitAttendanceSchema.safeParse(req.body);
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
+      return res.status(400).json({ error: errorMsg });
+    }
+
+    const { sessionId, status, lat, lng } = validation.data;
     const studentId = req.user.id;
 
     // 1. Cek apakah sesi valid (sudah di-generate oleh Tutor)
@@ -53,7 +81,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
       data: {
         sessionId,
         studentId,
-        status: status || 'hadir',
+        status, // Zod matches the AttendanceStatus enum type perfectly!
         lat,
         lng
       }
