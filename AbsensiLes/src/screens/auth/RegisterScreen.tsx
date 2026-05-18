@@ -1,9 +1,10 @@
 import React, { useState } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Alert } from 'react-native';
 import { TextInput, Button, Text, Surface, useTheme, SegmentedButtons } from 'react-native-paper';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types/navigation';
+import api from '../../services/api';
 
 type NavigationProp = StackNavigationProp<AuthStackParamList, 'Register'>;
 
@@ -17,12 +18,24 @@ export default function RegisterScreen() {
   const theme = useTheme();
   const navigation = useNavigation<NavigationProp>();
 
-  const handleRegister = () => {
+  const handleRegister = async () => {
+    if (!name || !email || !password) {
+      Alert.alert('Error', 'Semua kolom wajib diisi.');
+      return;
+    }
+
     setLoading(true);
-    setTimeout(() => {
+    try {
+      await api.post('/auth/register', { name, email, password, role });
+      Alert.alert('Registrasi Berhasil', 'Akun Anda berhasil didaftarkan. Silakan masuk.', [
+        { text: 'OK', onPress: () => navigation.navigate('Login') }
+      ]);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Terjadi kesalahan saat mendaftar.';
+      Alert.alert('Registrasi Gagal', errorMsg);
+    } finally {
       setLoading(false);
-      navigation.navigate('Login');
-    }, 1500);
+    }
   };
 
   return (

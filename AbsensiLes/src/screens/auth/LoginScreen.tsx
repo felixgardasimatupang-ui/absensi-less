@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Platform, Alert } from 'react-native';
 import { TextInput, Button, Text, Surface, useTheme } from 'react-native-paper';
 import { useAuthStore } from '../../store/useAuthStore';
+import api from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types/navigation';
@@ -24,16 +25,17 @@ export default function LoginScreen() {
     }
     
     setLoading(true);
-    // Simulasi pemanggilan API
-    setTimeout(() => {
-      // Mock login response
-      let role: 'admin' | 'tutor' | 'student' = 'student';
-      if (email.includes('admin')) role = 'admin';
-      else if (email.includes('tutor')) role = 'tutor';
+    try {
+      const response = await api.post('/auth/login', { email, password });
+      const { user, token } = response.data;
       
-      login({ id: '1', name: 'User', email, role }, 'dummy-token');
+      login(user, token);
+    } catch (error: any) {
+      const errorMsg = error.response?.data?.error || error.message || 'Terjadi kesalahan saat masuk.';
+      Alert.alert('Masuk Gagal', errorMsg);
+    } finally {
       setLoading(false);
-    }, 1500);
+    }
   };
 
   return (
