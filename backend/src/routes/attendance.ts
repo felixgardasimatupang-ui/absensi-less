@@ -36,9 +36,12 @@ router.post('/session', authenticate, async (req: AuthRequest, res, next) => {
     const { sessionId, classInfo } = validation.data;
     
     const session = await prisma.session.create({
-      data: {
-        ...(sessionId ? { id: sessionId } : {}),
-        tutorId: req.user.id,
+      data: sessionId ? {
+        id: sessionId,
+        tutor: { connect: { id: req.user.id } },
+        classInfo,
+      } : {
+        tutor: { connect: { id: req.user.id } },
         classInfo,
       }
     });
