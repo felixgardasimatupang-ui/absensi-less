@@ -37,7 +37,7 @@ router.post('/session', authenticate, async (req: AuthRequest, res, next) => {
     
     const session = await prisma.session.create({
       data: {
-        id: sessionId || undefined, // undefined lets Prisma fall back to @default(uuid())
+        ...(sessionId ? { id: sessionId } : {}),
         tutorId: req.user.id,
         classInfo,
       }
