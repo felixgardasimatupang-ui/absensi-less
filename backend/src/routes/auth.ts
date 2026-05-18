@@ -3,6 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -20,20 +21,20 @@ const LoginSchema = z.object({
 });
 
 // REGISTRASI USER BARU
-router.post('/register', async (req, res) => {
+router.post('/register', async (req, res, next) => {
   try {
     // Validate request body
     const validation = RegisterSchema.safeParse(req.body);
     if (!validation.success) {
       const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
-      return res.status(400).json({ error: errorMsg });
+      throw new AppError(errorMsg, 400);
     }
 
     const { name, email, password, role } = validation.data;
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
-      return res.status(400).json({ error: 'Email sudah terdaftar.' });
+      throw new AppError('Email sudah terdaftar.', 400);
     }
 
     const hashedPassword = await bcrypt.hash(password, 10);
@@ -46,30 +47,30 @@ router.post('/register', async (req, res) => {
       user: { id: user.id, email: user.email, role: user.role } 
     });
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
+    next(error);
   }
 });
 
 // LOGIN
-router.post('/login', async (req, res) => {
+router.post('/login', async (req, res, next) => {
   try {
     // Validate request body
     const validation = LoginSchema.safeParse(req.body);
     if (!validation.success) {
       const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
-      return res.status(400).json({ error: errorMsg });
+      throw new AppError(errorMsg, 400);
     }
 
     const { email, password } = validation.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
-      return res.status(400).json({ error: 'Kredensial tidak valid.' });
+      throw new AppError('Kredensial tidak valid.', 400);
     }
 
     const validPassword = await bcrypt.compare(password, user.password);
     if (!validPassword) {
-      return res.status(400).json({ error: 'Kredensial tidak valid.' });
+      throw new AppError('Kredensial tidak valid.', 400);
     }
 
     const token = jwt.sign(
@@ -92,18 +93,22 @@ router.post('/login', async (req, res) => {
       user: { id: user.id, name: user.name, email: user.email, role: user.role }
     });
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
+    next(error);
   }
 });
 
 // LOGOUT
-router.post('/logout', (req, res) => {
-  res.clearCookie('token', {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    sameSite: 'lax'
-  });
-  res.json({ message: 'Logout berhasil!' });
+router.post('/logout', (req, res, next) => {
+  try {
+    res.clearCookie('token', {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax'
+    });
+    res.json({ message: 'Logout berhasil!' });
+  } catch (error) {
+    next(error);
+  }
 });
 
 export default router;

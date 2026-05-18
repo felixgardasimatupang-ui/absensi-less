@@ -68,6 +68,9 @@ app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'ok', message: 'Backend Absensi Les is running perfectly!' });
 });
 
+// Import and Register Centralized Error Handler Middleware (MUST be registered after all routes)
+import { errorHandler } from './middleware/errorHandler';
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {

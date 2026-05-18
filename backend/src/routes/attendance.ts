@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authenticate, AuthRequest } from '../middleware/auth';
 import { prisma } from '../lib/prisma';
 import { z } from 'zod';
+import { AppError } from '../middleware/errorHandler';
 
 const router = Router();
 
@@ -19,17 +20,17 @@ const SubmitAttendanceSchema = z.object({
 });
 
 // BUAT SESI KELAS BARU (Hanya Tutor)
-router.post('/session', authenticate, async (req: AuthRequest, res) => {
+router.post('/session', authenticate, async (req: AuthRequest, res, next) => {
   try {
     if (req.user.role !== 'tutor') {
-      return res.status(403).json({ error: 'Hanya tutor yang dapat membuat sesi kelas.' });
+      throw new AppError('Hanya tutor yang dapat membuat sesi kelas.', 403);
     }
 
     // Validate request body
     const validation = CreateSessionSchema.safeParse(req.body);
     if (!validation.success) {
       const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
-      return res.status(400).json({ error: errorMsg });
+      throw new AppError(errorMsg, 400);
     }
 
     const { sessionId, classInfo } = validation.data;
@@ -44,18 +45,18 @@ router.post('/session', authenticate, async (req: AuthRequest, res) => {
 
     res.status(201).json({ message: 'Sesi kelas berhasil dibuat', session });
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan saat membuat sesi.' });
+    next(error);
   }
 });
 
 // SUBMIT ABSEN (Siswa Scan QR)
-router.post('/', authenticate, async (req: AuthRequest, res) => {
+router.post('/', authenticate, async (req: AuthRequest, res, next) => {
   try {
     // Validate request body
     const validation = SubmitAttendanceSchema.safeParse(req.body);
     if (!validation.success) {
       const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
-      return res.status(400).json({ error: errorMsg });
+      throw new AppError(errorMsg, 400);
     }
 
     const { sessionId, status, lat, lng } = validation.data;
@@ -64,7 +65,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     // 1. Cek apakah sesi valid (sudah di-generate oleh Tutor)
     const session = await prisma.session.findUnique({ where: { id: sessionId } });
     if (!session) {
-      return res.status(404).json({ error: 'QR Code tidak valid atau sesi telah berakhir.' });
+      throw new AppError('QR Code tidak valid atau sesi telah berakhir.', 404);
     }
 
     // 2. Cek agar siswa tidak absen ganda (Double-tap prevention)
@@ -73,7 +74,7 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
     });
 
     if (existing) {
-      return res.status(400).json({ error: 'Anda sudah melakukan presensi untuk sesi ini.' });
+      throw new AppError('Anda sudah melakukan presensi untuk sesi ini.', 400);
     }
 
     // 3. Simpan data absen
@@ -89,12 +90,12 @@ router.post('/', authenticate, async (req: AuthRequest, res) => {
 
     res.status(201).json({ message: 'Presensi berhasil dicatat!', attendance });
   } catch (error) {
-    res.status(500).json({ error: 'Terjadi kesalahan sistem saat menyimpan absen.' });
+    next(error);
   }
 });
 
 // AMBIL RIWAYAT ABSEN (Berdasarkan Siswa)
-router.get('/history', authenticate, async (req: AuthRequest, res) => {
+router.get('/history', authenticate, async (req: AuthRequest, res, next) => {
   try {
     const studentId = req.user.id;
     
@@ -110,7 +111,7 @@ router.get('/history', authenticate, async (req: AuthRequest, res) => {
 
     res.json({ history });
   } catch (error) {
-    res.status(500).json({ error: 'Gagal memuat histori presensi.' });
+    next(error);
   }
 });
 
