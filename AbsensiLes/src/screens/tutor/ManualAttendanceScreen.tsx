@@ -1,23 +1,39 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList, KeyboardAvoidingView, Platform } from 'react-native';
-import { Text, Surface, List, Checkbox, Button, Searchbar, Snackbar } from 'react-native-paper';
+import { Text, Surface, List, Checkbox, Button, Searchbar, Snackbar, TextInput, ActivityIndicator } from 'react-native-paper';
 import { useAuthStore } from '../../store/useAuthStore';
-
-const DUMMY_STUDENTS = [
-  { id: 'S1', name: 'Budi Santoso' },
-  { id: 'S2', name: 'Siti Aminah' },
-  { id: 'S3', name: 'Agus Wijaya' },
-  { id: 'S4', name: 'Rina Melati' },
-  { id: 'S5', name: 'Rangga Pratama' },
-];
+import { attendanceService } from '../../services/attendanceService';
+import type { StudentSummary } from '../../types';
 
 export default function ManualAttendanceScreen() {
   const { logout } = useAuthStore();
+  const [classInfo, setClassInfo] = useState('');
   const [search, setSearch] = useState('');
   const [presentIds, setPresentIds] = useState<Set<string>>(new Set());
+  const [students, setStudents] = useState<StudentSummary[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
   const [toastVisible, setToastVisible] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
 
-  const filteredStudents = DUMMY_STUDENTS.filter(s => 
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const data = await attendanceService.getStudents();
+        setStudents(data);
+      } catch (error) {
+        console.error('Failed to fetch students', error);
+        setToastMessage('Gagal memuat daftar siswa.');
+        setToastVisible(true);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
+
+  const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -28,14 +44,49 @@ export default function ManualAttendanceScreen() {
     setPresentIds(newSet);
   };
 
-  const handleSave = () => {
-    setToastVisible(true);
-    // Simpan ke API ditaruh di sini
+  const handleSave = async () => {
+    if (!classInfo.trim()) {
+      setToastMessage('Nama kelas wajib diisi.');
+      setToastVisible(true);
+      return;
+    }
+
+    if (presentIds.size === 0) {
+      setToastMessage('Pilih minimal satu siswa.');
+      setToastVisible(true);
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await attendanceService.submitManualAttendance({
+        classInfo,
+        studentIds: Array.from(presentIds),
+        status: 'hadir',
+      });
+      setClassInfo('');
+      setPresentIds(new Set());
+      setToastMessage('Data presensi manual berhasil disimpan ke server.');
+      setToastVisible(true);
+    } catch (error: any) {
+      setToastMessage(error.response?.data?.error || error.message || 'Gagal menyimpan presensi manual.');
+      setToastVisible(true);
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <Surface style={styles.header} elevation={2}>
+        <TextInput
+          label="Nama Kelas"
+          value={classInfo}
+          onChangeText={setClassInfo}
+          mode="outlined"
+          style={styles.classInput}
+          placeholder="Contoh: Matematika SMA XII"
+        />
         <Searchbar
           placeholder="Cari nama siswa..."
           onChangeText={setSearch}
@@ -45,36 +96,49 @@ export default function ManualAttendanceScreen() {
         />
       </Surface>
 
-      <FlatList
-        data={filteredStudents}
-        keyExtractor={item => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <Surface style={styles.card} elevation={1}>
-            <List.Item
-              title={item.name}
-              titleStyle={{ fontWeight: 'bold' }}
-              left={props => <List.Icon {...props} icon="account-circle-outline" />}
-              right={() => (
-                <View style={{ justifyContent: 'center', paddingRight: 8 }}>
-                  <Checkbox
-                    status={presentIds.has(item.id) ? 'checked' : 'unchecked'}
-                    onPress={() => toggleAttendance(item.id)}
-                    color="#1976D2"
-                  />
-                </View>
-              )}
-              onPress={() => toggleAttendance(item.id)}
-            />
-          </Surface>
-        )}
-      />
+      {isLoading ? (
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Memuat daftar siswa...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={filteredStudents}
+          keyExtractor={item => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Surface style={styles.emptyCard} elevation={0}>
+              <Text style={{ textAlign: 'center', color: '#666' }}>Tidak ada siswa ditemukan.</Text>
+            </Surface>
+          }
+          renderItem={({ item }) => (
+            <Surface style={styles.card} elevation={1}>
+              <List.Item
+                title={item.name}
+                description={item.email}
+                titleStyle={{ fontWeight: 'bold' }}
+                left={props => <List.Icon {...props} icon="account-circle-outline" />}
+                right={() => (
+                  <View style={{ justifyContent: 'center', paddingRight: 8 }}>
+                    <Checkbox
+                      status={presentIds.has(item.id) ? 'checked' : 'unchecked'}
+                      onPress={() => toggleAttendance(item.id)}
+                      color="#1976D2"
+                    />
+                  </View>
+                )}
+                onPress={() => toggleAttendance(item.id)}
+              />
+            </Surface>
+          )}
+        />
+      )}
 
       <Surface style={styles.footer} elevation={5}>
         <Text variant="titleMedium" style={{ flex: 1, fontWeight: 'bold' }}>
-          Hadir: {presentIds.size} / {DUMMY_STUDENTS.length}
+          Hadir: {presentIds.size} / {students.length}
         </Text>
-        <Button mode="contained" onPress={handleSave}>
+        <Button mode="contained" onPress={handleSave} loading={isSaving} disabled={isSaving || isLoading}>
           Simpan Data
         </Button>
       </Surface>
@@ -88,7 +152,7 @@ export default function ManualAttendanceScreen() {
         onDismiss={() => setToastVisible(false)}
         duration={2000}
       >
-        Data presensi manual berhasil disimpan!
+        {toastMessage}
       </Snackbar>
     </KeyboardAvoidingView>
   );
@@ -97,9 +161,26 @@ export default function ManualAttendanceScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
   header: { padding: 16, backgroundColor: 'white', marginBottom: 8 },
+  classInput: { marginBottom: 12 },
   searchbar: { backgroundColor: '#f0f0f0', height: 48 },
   list: { padding: 16, gap: 12 },
   card: { borderRadius: 12, backgroundColor: 'white', overflow: 'hidden' },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#666',
+  },
+  emptyCard: {
+    margin: 16,
+    padding: 24,
+    borderRadius: 12,
+    backgroundColor: 'white',
+  },
   footer: {
     padding: 20,
     flexDirection: 'row',

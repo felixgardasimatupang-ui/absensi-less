@@ -19,7 +19,7 @@ import {
 } from 'lucide-react';
 import { useAuthStore } from './store';
 import api from './api';
-import type { Role } from './types';
+import type { Attendance, Role, User } from './types';
 import { Toaster } from 'react-hot-toast';
 
 // Toast Alert Helper Component
@@ -174,7 +174,6 @@ export default function App() {
                   >
                     <option value="student">Siswa (Student)</option>
                     <option value="tutor">Tutor (Pengajar)</option>
-                    <option value="admin">Administrator</option>
                   </select>
                   <UserIcon className="input-icon" size={18} />
                 </div>
@@ -347,14 +346,10 @@ function TutorGenerateQR({ triggerToast }: TutorGenerateQRProps) {
     if (!classInfo.trim()) return;
 
     setIsGenerating(true);
-    const newSessionId = `SESSION_${Date.now()}`;
-    
+
     try {
-      await api.post('/attendance/session', { 
-        sessionId: newSessionId, 
-        classInfo 
-      });
-      setSessionId(newSessionId);
+      const response = await api.post('/attendance/session', { classInfo });
+      setSessionId(response.data.session.id);
       triggerToast('Sesi QR Code kelas berhasil di-generate!');
     } catch (err: any) {
       triggerToast(err.response?.data?.error || 'Gagal membuat sesi kelas.', 'error');
@@ -430,23 +425,34 @@ function TutorGenerateQR({ triggerToast }: TutorGenerateQRProps) {
 // ==========================================
 // 3. TUTOR MANUAL ATTENDANCE COMPONENT
 // ==========================================
-const DUMMY_STUDENTS = [
-  { id: 'S1', name: 'Budi Santoso' },
-  { id: 'S2', name: 'Siti Aminah' },
-  { id: 'S3', name: 'Agus Wijaya' },
-  { id: 'S4', name: 'Rina Melati' },
-  { id: 'S5', name: 'Rangga Pratama' },
-];
-
 interface TutorManualAttendanceProps {
   triggerToast: (msg: string, type?: 'success' | 'error') => void;
 }
 
 function TutorManualAttendance({ triggerToast }: TutorManualAttendanceProps) {
+  const [classInfo, setClassInfo] = useState('');
   const [search, setSearch] = useState('');
   const [presentIds, setPresentIds] = useState<Set<string>>(new Set());
+  const [students, setStudents] = useState<User[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
 
-  const filteredStudents = DUMMY_STUDENTS.filter(s => 
+  useEffect(() => {
+    const fetchStudents = async () => {
+      try {
+        const response = await api.get('/attendance/students');
+        setStudents(response.data.students || []);
+      } catch (err) {
+        console.error('Failed to fetch students', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchStudents();
+  }, []);
+
+  const filteredStudents = students.filter(s =>
     s.name.toLowerCase().includes(search.toLowerCase())
   );
 
@@ -460,8 +466,32 @@ function TutorManualAttendance({ triggerToast }: TutorManualAttendanceProps) {
     setPresentIds(newSet);
   };
 
-  const handleSave = () => {
-    triggerToast(`Berhasil menyimpan presensi manual! ${presentIds.size} siswa hadir.`);
+  const handleSave = async () => {
+    if (!classInfo.trim()) {
+      triggerToast('Informasi kelas wajib diisi.', 'error');
+      return;
+    }
+
+    if (presentIds.size === 0) {
+      triggerToast('Pilih minimal satu siswa.', 'error');
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await api.post('/attendance/manual', {
+        classInfo,
+        studentIds: Array.from(presentIds),
+        status: 'hadir',
+      });
+      triggerToast(`Presensi manual tersimpan untuk ${presentIds.size} siswa.`);
+      setPresentIds(new Set());
+      setClassInfo('');
+    } catch (err: any) {
+      triggerToast(err.response?.data?.error || 'Gagal menyimpan presensi manual.', 'error');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -473,6 +503,21 @@ function TutorManualAttendance({ triggerToast }: TutorManualAttendanceProps) {
       <p className="card-body" style={{ marginBottom: '24px' }}>
         Jika siswa kesulitan melakukan pemindaian QR Code secara langsung, Anda dapat mencentang kehadiran mereka secara manual di bawah ini.
       </p>
+
+      <div className="form-group">
+        <label className="form-label">Informasi / Nama Kelas</label>
+        <div className="input-wrapper">
+          <input
+            type="text"
+            className="form-input"
+            placeholder="Contoh: Matematika SMA XII - Pertemuan 5"
+            value={classInfo}
+            onChange={e => setClassInfo(e.target.value)}
+            required
+          />
+          <Calendar className="input-icon" size={18} />
+        </div>
+      </div>
 
       {/* Search Input bar */}
       <div className="search-container" style={{ position: 'relative' }}>
@@ -487,7 +532,11 @@ function TutorManualAttendance({ triggerToast }: TutorManualAttendanceProps) {
       </div>
 
       <div className="student-list" style={{ marginBottom: '24px' }}>
-        {filteredStudents.length > 0 ? (
+        {isLoading ? (
+          <div style={{ textAlign: 'center', color: 'var(--text-muted)', padding: '24px' }}>
+            Memuat daftar siswa...
+          </div>
+        ) : filteredStudents.length > 0 ? (
           filteredStudents.map(student => (
             <div 
               key={student.id} 
@@ -521,11 +570,11 @@ function TutorManualAttendance({ triggerToast }: TutorManualAttendanceProps) {
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderTop: '1px solid var(--panel-border)', paddingTop: '24px' }}>
         <div style={{ fontSize: '15px', fontWeight: '600' }}>
-          Hadir: <span style={{ color: 'var(--success)', fontSize: '18px' }}>{presentIds.size}</span> / {DUMMY_STUDENTS.length} Siswa
+          Hadir: <span style={{ color: 'var(--success)', fontSize: '18px' }}>{presentIds.size}</span> / {students.length} Siswa
         </div>
-        <button className="btn btn-primary" style={{ width: 'auto' }} onClick={handleSave}>
+        <button className="btn btn-primary" style={{ width: 'auto' }} onClick={handleSave} disabled={isSaving || isLoading}>
           <Check size={18} />
-          Simpan Data Presensi
+          {isSaving ? 'Menyimpan...' : 'Simpan Data Presensi'}
         </button>
       </div>
     </div>
@@ -643,7 +692,7 @@ function StudentScanQR({ triggerToast }: StudentScanQRProps) {
 // 5. STUDENT ATTENDANCE HISTORY COMPONENT
 // ==========================================
 function StudentHistory() {
-  const [history, setHistory] = useState<any[]>([]);
+  const [history, setHistory] = useState<Attendance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {

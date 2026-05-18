@@ -4,7 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
-import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
+import { authenticate, requireRole, AuthRequest, extractTokenFromRequest, signAuthToken } from '../middleware/auth';
 
 const router = Router();
 
@@ -74,11 +74,13 @@ router.post('/login', async (req, res, next) => {
       throw new AppError('Kredensial tidak valid.', 400);
     }
 
-    const token = jwt.sign(
-      { id: user.id, role: user.role, name: user.name, email: user.email },
-      process.env.JWT_SECRET as string,
-      { expiresIn: '30d' }
-    );
+    const token = signAuthToken({
+      id: user.id,
+      role: user.role,
+      name: user.name,
+      email: user.email,
+      tokenVersion: user.tokenVersion,
+    });
 
     // Set secure HttpOnly cookie for Web clients
     res.cookie('token', token, {
@@ -99,8 +101,25 @@ router.post('/login', async (req, res, next) => {
 });
 
 // LOGOUT
-router.post('/logout', (req, res, next) => {
+router.post('/logout', async (req, res, next) => {
   try {
+    const token = extractTokenFromRequest(req);
+
+    if (token) {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET as string) as { id: string };
+      const user = await prisma.user.findUnique({
+        where: { id: decoded.id },
+        select: { id: true },
+      });
+
+      if (user) {
+        await prisma.user.update({
+          where: { id: user.id },
+          data: { tokenVersion: { increment: 1 } },
+        });
+      }
+    }
+
     res.clearCookie('token', {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { Text, Button, Surface, ActivityIndicator } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { attendanceService } from '../../services/attendanceService';
+import { getCurrentVerifiedLocation } from '../../utils/locationHelper';
 
 export default function ScanQRScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -27,19 +29,33 @@ export default function ScanQRScreen() {
     );
   }
 
-  const handleBarCodeScanned = ({ type, data }: { type: string; data: string }) => {
+  const handleBarCodeScanned = async ({ data }: { type: string; data: string }) => {
     setScanned(true);
     setLoading(true);
-    
-    // Simulasi pengiriman data presensi ke server backend
-    setTimeout(() => {
-      setLoading(false);
+
+    try {
+      const coords = await getCurrentVerifiedLocation().catch(() => null);
+      await attendanceService.markPresent({
+        sessionId: data,
+        status: 'hadir',
+        lat: coords?.latitude,
+        lng: coords?.longitude,
+      });
+
       Alert.alert(
-        "✅ Presensi Berhasil!",
-        `Data tercatat pada sistem.\nData QR: ${data.substring(0, 30)}...`,
-        [{ text: "Scan Lagi", onPress: () => setScanned(false) }]
+        'Presensi Berhasil',
+        'Data presensi Anda berhasil dicatat ke server.',
+        [{ text: 'Scan Lagi', onPress: () => setScanned(false) }]
       );
-    }, 1500);
+    } catch (error: any) {
+      Alert.alert(
+        'Presensi Gagal',
+        error.response?.data?.error || error.message || 'Gagal mengirim presensi ke server.',
+        [{ text: 'Coba Lagi', onPress: () => setScanned(false) }]
+      );
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (

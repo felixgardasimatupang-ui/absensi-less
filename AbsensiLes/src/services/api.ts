@@ -1,8 +1,6 @@
 import axios from 'axios';
 import { useAuthStore } from '../store/useAuthStore';
-
-// Backend Node.js lokal (IP disesuaikan dari server Expo)
-const API_URL = 'https://2df9f003876952eb-36-74-234-209.serveousercontent.com/api';
+import { API_URL } from '../config';
 
 const api = axios.create({
   baseURL: API_URL,

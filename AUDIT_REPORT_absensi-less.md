@@ -8,6 +8,114 @@
 
 ---
 
+## 🆕 Hasil Re-Audit Kode Aktual
+
+> **Tanggal verifikasi ulang:** 18 Mei 2026  
+> **Metode:** pembacaan source code + build/type-check lokal
+
+### Status Temuan Lama
+
+| ID | Status | Catatan |
+|---|---|---|
+| K-01 | ✅ Sudah tidak valid | Mobile login sekarang memanggil `POST /auth/login` sungguhan di `AbsensiLes/src/screens/auth/LoginScreen.tsx`. |
+| K-02 | ✅ Sudah tidak valid | Registrasi publik backend sudah membatasi role ke `tutor` dan `student` di `backend/src/routes/auth.ts`. |
+| K-03 | ⚠️ Sebagian tidak valid | Web store masih memakai `localStorage`, tetapi `partialize` hanya menyimpan `user`; token tidak dipersist. Risiko JWT di `localStorage` pada laporan lama tidak lagi akurat. |
+| K-04 | ✅ Sudah tidak valid | Mobile tutor QR sekarang memanggil `POST /attendance/session` dan memakai `session.id` dari backend. |
+| K-05 | ❌ Masih valid | Manual attendance mobile dan web masih dummy, belum tersimpan ke backend. |
+| K-06 | ❌ Masih valid | Mobile API masih hardcoded ke URL Serveo publik. |
+| K-07 | ❌ Masih valid | Logout belum menginvalidasi JWT bearer yang sudah terbit. |
+| K-08 | ❌ Masih valid | Endpoint submit attendance belum membatasi role ke `student`. |
+| S-01 | ❌ Masih valid | Prisma masih `sqlite`, sedangkan `docker-compose.yml` menyiapkan PostgreSQL. |
+| S-02 | ❌ Masih valid | Workflow CI masih menjalankan `npx webpack` walau frontend memakai Vite. |
+| S-03 | ❌ Masih valid | File `.env.example` belum ada. |
+| S-04 | ❌ Masih valid | Belum ada test suite otomatis yang nyata. |
+| S-05 | ⚠️ Bergeser | Mobile QR sudah aman, tetapi web masih membuat `sessionId` prediktif dengan `Date.now()` dan backend masih mengizinkan client mengirim `sessionId`. |
+| S-06 | ❌ Masih valid | Rate limiting baru ada di auth, belum ada di endpoint attendance. |
+| S-07 | ❌ Masih valid | `AuthRequest.user` masih bertipe `any`. |
+
+### Temuan Aktual Paling Penting
+
+#### 1. Mobile scan QR masih simulasi penuh
+
+**File:** `AbsensiLes/src/screens/student/ScanQRScreen.tsx`
+
+- Scan QR di mobile belum mengirim request ke backend.
+- Aplikasi menampilkan sukses palsu setelah `setTimeout`, sehingga integritas data presensi tidak terjaga.
+
+#### 2. Endpoint submit attendance menerima semua role yang terautentikasi
+
+**File:** `backend/src/routes/attendance.ts`
+
+- `POST /api/attendance` memakai `authenticate`, tetapi tidak mengecek `req.user.role === 'student'`.
+- Admin dan tutor dapat mencatat presensi sebagai dirinya sendiri selama punya token valid.
+
+#### 3. Manual attendance masih mock di dua frontend
+
+**File:** `AbsensiLes/src/screens/tutor/ManualAttendanceScreen.tsx`, `frontend/src/App.tsx`
+
+- Daftar siswa masih hardcoded.
+- Tombol simpan belum menulis ke backend.
+
+#### 4. Riwayat absensi mobile masih dummy
+
+**File:** `AbsensiLes/src/screens/student/HistoryScreen.tsx`
+
+- History ditampilkan dari `DUMMY_HISTORY`, bukan `GET /api/attendance/history`.
+
+#### 5. Konfigurasi mobile masih menempel ke tunnel publik
+
+**File:** `AbsensiLes/src/services/api.ts`
+
+- URL API hardcoded ke domain `serveousercontent.com`.
+- Risiko utama: environment drift, dependensi ke tunnel sementara, dan potensi salah arah trafik produksi/dev.
+
+#### 6. Web masih mengizinkan pilihan role admin di UI registrasi
+
+**File:** `frontend/src/App.tsx`
+
+- Dropdown registrasi masih menampilkan `Administrator`.
+- Backend memang akan menolak, tetapi UI sekarang menyesatkan dan tidak sinkron dengan aturan server.
+
+#### 7. Session ID web masih bisa diprediksi dan dikendalikan client
+
+**File:** `frontend/src/App.tsx`, `backend/src/routes/attendance.ts`
+
+- Web membuat `sessionId` dengan `SESSION_${Date.now()}`.
+- Backend tetap menerima `sessionId` dari request body saat membuat sesi.
+- Ini melemahkan keunikan sesi dan membuka peluang enumerasi / collision yang tidak perlu.
+
+#### 8. Logout hanya membersihkan cookie lokal, bukan mencabut token
+
+**File:** `backend/src/routes/auth.ts`
+
+- JWT yang sudah terbit tetap valid sampai 30 hari.
+- Karena backend juga menerima header `Authorization`, bearer token yang bocor tetap dapat dipakai walau user menekan logout.
+
+### Verifikasi Teknis
+
+- `frontend`: `npm run build` ✅
+- `backend`: `npx tsc --noEmit` ✅
+- `AbsensiLes`: `npx tsc --noEmit` ✅
+
+### Implementasi Perbaikan yang Sudah Diterapkan
+
+- `K-05`: flow presensi manual sekarang sudah memiliki endpoint backend nyata dan dipakai oleh web/mobile.
+- `K-06`: URL API mobile dipindahkan ke `EXPO_PUBLIC_API_URL` melalui file konfigurasi.
+- `K-07`: logout sekarang mencabut validitas JWT aktif melalui `tokenVersion`.
+- `K-08`: endpoint submit attendance sekarang hanya menerima role `student`.
+- `S-01`: `docker-compose.yml` diselaraskan ke runtime SQLite yang memang dipakai backend saat ini.
+- `S-02`: workflow GitHub Actions diganti dari `webpack` ke pipeline CI yang sesuai untuk backend, frontend, dan mobile.
+- `S-03`: file `.env.example` ditambahkan untuk backend, frontend, dan mobile.
+- `S-05`: session ID web tidak lagi dibuat dengan `Date.now()`; session dibuat server-side.
+- `S-06`: rate limiting ditambahkan ke namespace `/api/attendance`.
+- `S-07`: `req.user` tidak lagi memakai `any`; sekarang memakai payload JWT yang terdefinisi.
+
+### Kesimpulan Re-Audit
+
+Nilai `D+` dari laporan lama masih masuk akal secara umum, tetapi daftar temuannya perlu diperbarui. Sebagian isu kritikal awal sudah dibenahi, namun project masih memiliki gap nyata pada integritas presensi mobile/web, pembatasan role pada attendance, pengelolaan token logout, dan drift konfigurasi environment.
+
+---
+
 ## 📊 Ringkasan Eksekutif
 
 | Kategori | Jumlah |

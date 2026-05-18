@@ -20,12 +20,13 @@ enum AttendanceStatus {
 }
 
 model User {
-  id        String   @id @default(uuid())
-  name      String
-  email     String   @unique
-  password  String
-  role      Role     // Enum: admin, tutor, student
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  name         String
+  email        String   @unique
+  password     String
+  role         Role     // Enum: admin, tutor, student
+  tokenVersion Int      @default(0)
+  createdAt    DateTime @default(now())
 
   attendances Attendance[]
   sessions    Session[]
@@ -52,4 +53,6 @@ model Attendance {
 
   session Session @relation(fields: [sessionId], references: [id])
   student User    @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
 }

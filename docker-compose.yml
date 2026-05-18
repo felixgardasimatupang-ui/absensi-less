@@ -1,18 +1,16 @@
 version: '3.8'
 
 services:
-  postgres:
-    image: postgres:15-alpine
-    container_name: absensiles_postgres
-    restart: always
-    environment:
-      POSTGRES_USER: absensiles_user
-      POSTGRES_PASSWORD: absensiles_password
-      POSTGRES_DB: absensiles_db
+  backend:
+    image: node:22-alpine
+    container_name: absensiles_backend
+    working_dir: /app/backend
+    command: sh -c "npm ci && npx prisma generate && npx ts-node src/server.ts"
     ports:
-      - '5432:5432'
+      - '3000:3000'
+    environment:
+      PORT: 3000
+      JWT_SECRET: change-this-secret-in-production
+      DATABASE_URL: file:./prisma/dev.db
     volumes:
-      - pgdata:/var/lib/postgresql/data
-
-volumes:
-  pgdata:
+      - .:/app

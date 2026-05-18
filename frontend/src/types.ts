@@ -33,6 +33,6 @@ export interface AuthState {
   token: string | null;
   isLoading: boolean;
   login: (user: User, token: string) => void;
-  logout: () => void;
+  logout: () => Promise<void> | void;
   setLoading: (loading: boolean) => void;
 }

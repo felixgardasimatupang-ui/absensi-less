@@ -1,20 +1,31 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, FlatList } from 'react-native';
-import { Text, List, Surface, Button, Chip } from 'react-native-paper';
+import { Text, List, Surface, Button, Chip, ActivityIndicator } from 'react-native-paper';
 import { useAuthStore } from '../../store/useAuthStore';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
-
-const DUMMY_HISTORY = [
-  { id: '1', date: new Date().toISOString(), class: 'Matematika - Kelas 10', status: 'hadir' },
-  { id: '2', date: new Date(Date.now() - 86400000).toISOString(), class: 'Fisika - Kelas 10', status: 'hadir' },
-  { id: '3', date: new Date(Date.now() - 86400000 * 2).toISOString(), class: 'Kimia - Kelas 10', status: 'izin' },
-  { id: '4', date: new Date(Date.now() - 86400000 * 3).toISOString(), class: 'Biologi - Kelas 10', status: 'alpa' },
-];
+import { attendanceService } from '../../services/attendanceService';
+import type { AttendanceHistoryItem } from '../../types';
 
 export default function HistoryScreen() {
   const { user, logout } = useAuthStore();
-  const [data] = useState(DUMMY_HISTORY);
+  const [data, setData] = useState<AttendanceHistoryItem[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchHistory = async () => {
+      try {
+        const history = await attendanceService.getStudentHistory();
+        setData(history);
+      } catch (error) {
+        console.error('Failed to fetch history', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchHistory();
+  }, []);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -37,37 +48,57 @@ export default function HistoryScreen() {
         </Button>
       </Surface>
 
-      <FlatList
-        data={data}
-        keyExtractor={(item) => item.id}
-        contentContainerStyle={styles.list}
-        renderItem={({ item }) => (
-          <Surface style={styles.card} elevation={1}>
-            <List.Item
-              title={item.class}
-              titleStyle={{ fontWeight: 'bold' }}
-              description={format(new Date(item.date), 'EEEE, dd MMMM yyyy HH:mm', { locale: id })}
-              left={props => <List.Icon {...props} icon="book-education" />}
-              right={() => (
-                <View style={{ justifyContent: 'center' }}>
-                  <Chip 
-                    textStyle={{ color: 'white', fontSize: 12 }} 
-                    style={{ backgroundColor: getStatusColor(item.status), height: 28 }}
-                  >
-                    {item.status.toUpperCase()}
-                  </Chip>
-                </View>
-              )}
-            />
-          </Surface>
-        )}
-      />
+      {isLoading ? (
+        <View style={styles.center}>
+          <ActivityIndicator size="large" />
+          <Text style={styles.loadingText}>Memuat riwayat presensi...</Text>
+        </View>
+      ) : (
+        <FlatList
+          data={data}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.list}
+          ListEmptyComponent={
+            <Surface style={styles.emptyCard} elevation={0}>
+              <Text style={{ textAlign: 'center', color: '#666' }}>
+                Belum ada riwayat presensi yang tercatat.
+              </Text>
+            </Surface>
+          }
+          renderItem={({ item }) => (
+            <Surface style={styles.card} elevation={1}>
+              <List.Item
+                title={item.session?.classInfo || 'Sesi Kelas'}
+                titleStyle={{ fontWeight: 'bold' }}
+                description={format(new Date(item.timestamp), 'EEEE, dd MMMM yyyy HH:mm', { locale: id })}
+                left={props => <List.Icon {...props} icon="book-education" />}
+                right={() => (
+                  <View style={{ justifyContent: 'center' }}>
+                    <Chip 
+                      textStyle={{ color: 'white', fontSize: 12 }} 
+                      style={{ backgroundColor: getStatusColor(item.status), height: 28 }}
+                    >
+                      {item.status.toUpperCase()}
+                    </Chip>
+                  </View>
+                )}
+              />
+            </Surface>
+          )}
+        />
+      )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F5F5F5' },
+  center: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+  },
   header: {
     padding: 16,
     flexDirection: 'row',
@@ -78,4 +109,13 @@ const styles = StyleSheet.create({
   },
   list: { padding: 16, gap: 12 },
   card: { borderRadius: 12, backgroundColor: 'white', overflow: 'hidden' },
+  emptyCard: {
+    padding: 24,
+    borderRadius: 12,
+    backgroundColor: 'white',
+  },
+  loadingText: {
+    marginTop: 12,
+    color: '#666',
+  },
 });

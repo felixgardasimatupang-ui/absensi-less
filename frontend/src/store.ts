@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState } from './types';
 import axios from 'axios';
+import { API_URL } from './config';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -12,8 +13,10 @@ export const useAuthStore = create<AuthState>()(
       login: (user, token) => set({ user, token }),
       logout: async () => {
         try {
-          // Clear HttpOnly cookie on the backend, using direct axios to avoid circular dependency
-          await axios.post('http://localhost:3000/api/auth/logout', {}, { withCredentials: true });
+          await axios.post(`${API_URL}/auth/logout`, {}, {
+            withCredentials: true,
+            headers: tokenHeader(useAuthStore.getState().token),
+          });
         } catch (error) {
           console.error('Failed to logout on server:', error);
         } finally {
@@ -29,3 +32,7 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+function tokenHeader(token: string | null) {
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}

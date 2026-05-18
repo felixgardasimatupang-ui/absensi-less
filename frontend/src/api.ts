@@ -1,9 +1,7 @@
 import axios from 'axios';
 import { useAuthStore } from './store';
 import toast from 'react-hot-toast';
-
-// Use environment variable for scalability, fallback to localhost for local dev convenience
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api';
+import { API_URL } from './config';
 
 const api = axios.create({
   baseURL: API_URL,

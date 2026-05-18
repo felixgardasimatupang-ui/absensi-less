@@ -6,7 +6,7 @@ import rateLimit from 'express-rate-limit';
 import authRoutes from './routes/auth';
 import attendanceRoutes from './routes/attendance';
 
-const app = express();
+export const app = express();
 
 // Secure CORS Config for Cookie-Based Authentication
 const allowedOrigins = [
@@ -40,9 +40,19 @@ const authLimiter = rateLimit({
   legacyHeaders: false,
 });
 
+const attendanceLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 300,
+  message: {
+    error: 'Terlalu banyak permintaan presensi dari IP ini, silakan coba lagi beberapa saat lagi.'
+  },
+  standardHeaders: true,
+  legacyHeaders: false,
+});
+
 // Register API Routes
 app.use('/api/auth', authLimiter, authRoutes);
-app.use('/api/attendance', attendanceRoutes);
+app.use('/api/attendance', attendanceLimiter, attendanceRoutes);
 
 // Welcome / API Root Endpoint
 app.get('/', (req, res) => {
@@ -55,8 +65,9 @@ app.get('/', (req, res) => {
       auth: ['POST /api/auth/register', 'POST /api/auth/login'],
       attendance: [
         'POST /api/attendance/session',
-        'POST /api/attendance/verify',
-        'GET /api/attendance/history/:studentId',
+        'POST /api/attendance',
+        'POST /api/attendance/manual',
+        'GET /api/attendance/history',
         'GET /api/attendance/students'
       ]
     }
@@ -72,7 +83,9 @@ app.get('/api/health', (req, res) => {
 import { errorHandler } from './middleware/errorHandler';
 app.use(errorHandler);
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`✅ Server is successfully running on http://localhost:${PORT}`);
-});
+if (require.main === module) {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`✅ Server is successfully running on http://localhost:${PORT}`);
+  });
+}
