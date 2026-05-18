@@ -1,14 +1,35 @@
 import { Router } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 
 const router = Router();
 
+// Zod Schemas for Input Validation
+const RegisterSchema = z.object({
+  name: z.string().min(2, { message: 'Nama minimal terdiri dari 2 karakter.' }).max(50),
+  email: z.string().email({ message: 'Format email tidak valid.' }),
+  password: z.string().min(6, { message: 'Password minimal terdiri dari 6 karakter.' }),
+  role: z.enum(['admin', 'tutor', 'student'], { message: 'Role harus berupa admin, tutor, atau student.' })
+});
+
+const LoginSchema = z.object({
+  email: z.string().email({ message: 'Format email tidak valid.' }),
+  password: z.string().min(1, { message: 'Password tidak boleh kosong.' })
+});
+
 // REGISTRASI USER BARU
 router.post('/register', async (req, res) => {
   try {
-    const { name, email, password, role } = req.body;
+    // Validate request body
+    const validation = RegisterSchema.safeParse(req.body);
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
+      return res.status(400).json({ error: errorMsg });
+    }
+
+    const { name, email, password, role } = validation.data;
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
     if (existingUser) {
@@ -32,7 +53,14 @@ router.post('/register', async (req, res) => {
 // LOGIN
 router.post('/login', async (req, res) => {
   try {
-    const { email, password } = req.body;
+    // Validate request body
+    const validation = LoginSchema.safeParse(req.body);
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
+      return res.status(400).json({ error: errorMsg });
+    }
+
+    const { email, password } = validation.data;
 
     const user = await prisma.user.findUnique({ where: { email } });
     if (!user) {
@@ -50,6 +78,15 @@ router.post('/login', async (req, res) => {
       { expiresIn: '30d' }
     );
 
+    // Set secure HttpOnly cookie for Web clients
+    res.cookie('token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000 // 30 days
+    });
+
+    // Return token in body as well for React Native mobile compatibility
     res.json({
       token,
       user: { id: user.id, name: user.name, email: user.email, role: user.role }
@@ -57,6 +94,16 @@ router.post('/login', async (req, res) => {
   } catch (error) {
     res.status(500).json({ error: 'Terjadi kesalahan pada server.' });
   }
+});
+
+// LOGOUT
+router.post('/logout', (req, res) => {
+  res.clearCookie('token', {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    sameSite: 'lax'
+  });
+  res.json({ message: 'Logout berhasil!' });
 });
 
 export default router;

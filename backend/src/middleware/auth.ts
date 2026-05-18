@@ -6,7 +6,7 @@ export interface AuthRequest extends Request {
 }
 
 export const authenticate = (req: AuthRequest, res: Response, next: NextFunction) => {
-  const token = req.header('Authorization')?.split(' ')[1];
+  const token = req.cookies?.token || req.header('Authorization')?.split(' ')[1];
 
   if (!token) {
     return res.status(401).json({ error: 'Akses ditolak. Token autentikasi tidak ditemukan.' });
