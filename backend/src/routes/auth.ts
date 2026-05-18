@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma';
 import { AppError } from '../middleware/errorHandler';
+import { authenticate, requireRole, AuthRequest } from '../middleware/auth';
 
 const router = Router();
 
@@ -11,8 +12,8 @@ const router = Router();
 const RegisterSchema = z.object({
   name: z.string().min(2, { message: 'Nama minimal terdiri dari 2 karakter.' }).max(50),
   email: z.string().email({ message: 'Format email tidak valid.' }),
-  password: z.string().min(6, { message: 'Password minimal terdiri dari 6 karakter.' }),
-  role: z.enum(['admin', 'tutor', 'student'], { message: 'Role harus berupa admin, tutor, atau student.' })
+  password: z.string().min(8, { message: 'Password minimal terdiri dari 8 karakter.' }),
+  role: z.enum(['tutor', 'student'], { message: 'Role harus berupa tutor atau student.' })
 });
 
 const LoginSchema = z.object({
@@ -106,6 +107,42 @@ router.post('/logout', (req, res, next) => {
       sameSite: 'lax'
     });
     res.json({ message: 'Logout berhasil!' });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// CREATE USER (Khusus Admin)
+const AdminCreateUserSchema = z.object({
+  name: z.string().min(2, { message: 'Nama minimal terdiri dari 2 karakter.' }).max(50),
+  email: z.string().email({ message: 'Format email tidak valid.' }),
+  password: z.string().min(8, { message: 'Password minimal terdiri dari 8 karakter.' }),
+  role: z.enum(['admin', 'tutor', 'student'], { message: 'Role tidak valid.' })
+});
+
+router.post('/admin/users', authenticate, requireRole('admin'), async (req: AuthRequest, res, next) => {
+  try {
+    const validation = AdminCreateUserSchema.safeParse(req.body);
+    if (!validation.success) {
+      const errorMsg = validation.error.issues.map((e: any) => e.message).join(' ');
+      throw new AppError(errorMsg, 400);
+    }
+
+    const { name, email, password, role } = validation.data;
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      throw new AppError('Email sudah terdaftar.', 400);
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await prisma.user.create({
+      data: { name, email, password: hashedPassword, role }
+    });
+
+    res.status(201).json({ 
+      message: 'Pembuatan akun berhasil!', 
+      user: { id: user.id, email: user.email, role: user.role } 
+    });
   } catch (error) {
     next(error);
   }

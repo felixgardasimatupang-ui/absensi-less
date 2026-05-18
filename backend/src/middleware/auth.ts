@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { AppError } from './errorHandler';
 
 export interface AuthRequest extends Request {
   user?: any;
@@ -9,7 +10,7 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
   const token = req.cookies?.token || req.header('Authorization')?.split(' ')[1];
 
   if (!token) {
-    return res.status(401).json({ error: 'Akses ditolak. Token autentikasi tidak ditemukan.' });
+    return next(new AppError('Akses ditolak. Token autentikasi tidak ditemukan.', 401));
   }
 
   try {
@@ -17,6 +18,14 @@ export const authenticate = (req: AuthRequest, res: Response, next: NextFunction
     req.user = decoded; // Menyematkan data user (id, role) ke request
     next();
   } catch (error) {
-    res.status(401).json({ error: 'Token tidak valid atau sesi telah berakhir.' });
+    next(new AppError('Token tidak valid atau sesi telah berakhir.', 401));
   }
 };
+
+export const requireRole = (...roles: string[]) => 
+  (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user || !roles.includes(req.user.role)) {
+      throw new AppError('Akses tidak diizinkan.', 403);
+    }
+    next();
+  };

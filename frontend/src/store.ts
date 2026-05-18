@@ -25,6 +25,7 @@ export const useAuthStore = create<AuthState>()(
     {
       name: 'absensiles-auth-web',
       storage: createJSONStorage(() => localStorage),
+      partialize: (state) => ({ user: state.user }), // PROTEKSI XSS: Jangan simpan JWT di localStorage!
     }
   )
 );

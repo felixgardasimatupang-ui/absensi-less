@@ -1,35 +1,53 @@
 import React, { useState, useEffect } from 'react';
-import { View, StyleSheet } from 'react-native';
-import { Text, Surface, Button, useTheme } from 'react-native-paper';
+import { View, StyleSheet, Alert } from 'react-native';
+import { Text, Surface, Button, useTheme, TextInput } from 'react-native-paper';
 import QRCode from 'react-native-qrcode-svg';
 import { format } from 'date-fns';
 import { id } from 'date-fns/locale';
+import api from '../../services/api';
 
 export default function GenerateQRScreen() {
   const theme = useTheme();
   const [qrValue, setQrValue] = useState('');
+  const [classInfo, setClassInfo] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
   
-  const generateNewSession = () => {
-    const sessionData = {
-      sessionId: `SESS_${Math.random().toString(36).substring(2, 9).toUpperCase()}`,
-      timestamp: new Date().toISOString(),
-      classInfo: 'Kelas Reguler'
-    };
-    setQrValue(JSON.stringify(sessionData));
-  };
+  const generateNewSession = async () => {
+    if (!classInfo.trim()) {
+      Alert.alert('Error', 'Masukkan nama kelas terlebih dahulu.');
+      return;
+    }
 
-  useEffect(() => {
-    generateNewSession();
-  }, []);
+    setIsLoading(true);
+    try {
+      const response = await api.post('/attendance/session', { classInfo });
+      const sessionId = response.data.session.id; // UUID dari server
+      setQrValue(sessionId); // QR code berisi session ID yang valid di DB
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.error || err.message || 'Gagal membuat sesi.';
+      Alert.alert('Gagal', errorMsg);
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   return (
     <View style={styles.container}>
       <Text variant="titleLarge" style={styles.header}>
-        Kode Presensi Sesi Ini
+        Buat Sesi Presensi Baru
       </Text>
       <Text variant="bodyMedium" style={styles.date}>
         {format(new Date(), 'EEEE, dd MMMM yyyy', { locale: id })}
       </Text>
+
+      <TextInput
+        label="Nama Kelas"
+        value={classInfo}
+        onChangeText={setClassInfo}
+        placeholder="Contoh: Matematika SMA XII"
+        mode="outlined"
+        style={{ width: '100%', marginBottom: 20 }}
+      />
 
       <Surface style={styles.qrContainer} elevation={4}>
         {qrValue ? (
@@ -40,7 +58,7 @@ export default function GenerateQRScreen() {
             backgroundColor="white"
           />
         ) : (
-          <Text>Memuat QR Code...</Text>
+          <Text style={{ textAlign: 'center', color: '#666' }}>Masukkan nama kelas dan tekan Buat QR Code</Text>
         )}
       </Surface>
 
@@ -50,11 +68,13 @@ export default function GenerateQRScreen() {
 
       <Button 
         mode="contained" 
-        icon="refresh" 
+        icon="qrcode-plus" 
         onPress={generateNewSession}
         style={styles.button}
+        loading={isLoading}
+        disabled={isLoading || !classInfo.trim()}
       >
-        Perbarui QR Code
+        Buat QR Code
       </Button>
     </View>
   );
