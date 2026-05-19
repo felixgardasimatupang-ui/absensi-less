@@ -1,5 +1,16 @@
 import api from './api';
 import type { AttendanceHistoryItem, StudentSummary } from '../types';
+import { z } from 'zod';
+
+// Schemas for runtime validation of API responses
+const MarkPresentResponseSchema = z.object({});
+const HistoryResponseSchema = z.object({
+  history: z.array(z.unknown())
+});
+const StudentsResponseSchema = z.object({
+  students: z.array(z.unknown())
+});
+const ManualAttendanceResponseSchema = z.object({});
 
 export interface AttendanceRecord {
   sessionId: string;
@@ -22,25 +33,27 @@ export const attendanceService = {
       lat: data.lat,
       lng: data.lng,
     });
-    return response.data;
+    return MarkPresentResponseSchema.parse(response.data);
   },
   
   getStudentHistory: async () => {
     const response = await api.get<{ history: AttendanceHistoryItem[] }>('/attendance/history');
-    return response.data.history || [];
+    const parsed = HistoryResponseSchema.parse(response.data);
+    return parsed.history || [];
   },
-
+  
   getStudents: async () => {
     const response = await api.get<{ students: StudentSummary[] }>('/attendance/students');
-    return response.data.students || [];
+    const parsed = StudentsResponseSchema.parse(response.data);
+    return parsed.students || [];
   },
-
+  
   submitManualAttendance: async (payload: ManualAttendancePayload) => {
     const response = await api.post('/attendance/manual', {
       classInfo: payload.classInfo,
       studentIds: payload.studentIds,
       status: payload.status || 'hadir',
     });
-    return response.data;
+    return ManualAttendanceResponseSchema.parse(response.data);
   },
 };

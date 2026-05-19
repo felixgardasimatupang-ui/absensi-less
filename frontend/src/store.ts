@@ -1,38 +1,45 @@
+// [K-03 FIX] Cookie-Only Authentication Store
+// Token JWT TIDAK lagi disimpan di state Zustand atau sessionStorage.
+// Autentikasi sepenuhnya mengandalkan HttpOnly cookie yang di-set oleh backend,
+// sehingga tidak dapat diakses oleh JavaScript dan aman dari serangan XSS.
+
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState } from './types';
-import axios from 'axios';
 import { API_URL } from './config';
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      token: null,
       isLoading: false,
-      login: (user, token) => set({ user, token }),
+
+      // Menerima hanya data user, TIDAK menerima token
+      login: (user) => set({ user }),
+
       logout: async () => {
         try {
-          await axios.post(`${API_URL}/auth/logout`, {}, {
-            withCredentials: true,
-            headers: tokenHeader(useAuthStore.getState().token),
+          // Panggil backend untuk invalidasi tokenVersion + hapus HttpOnly cookie
+          await fetch(`${API_URL}/auth/logout`, {
+            method: 'POST',
+            credentials: 'include', // Kirim cookie secara otomatis
           });
         } catch (error) {
-          console.error('Failed to logout on server:', error);
+          console.error('Server logout request failed (non-critical):', error);
         } finally {
-          set({ user: null, token: null });
+          // Bersihkan state lokal setelah logout
+          set({ user: null });
         }
       },
+
       setLoading: (isLoading) => set({ isLoading }),
     }),
     {
       name: 'absensiles-auth-web',
       storage: createJSONStorage(() => sessionStorage),
-      partialize: (state) => ({ user: state.user }), // Hanya persist metadata user per-session browser.
+      // Hanya persist metadata user (nama, role) untuk UX — bukan token.
+      // Sesi login divalidasi ulang oleh cookie HttpOnly pada setiap request API.
+      partialize: (state) => ({ user: state.user }),
     }
   )
 );
-
-function tokenHeader(token: string | null) {
-  return token ? { Authorization: `Bearer ${token}` } : {};
-}

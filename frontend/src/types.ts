@@ -30,9 +30,10 @@ export interface Attendance {
 
 export interface AuthState {
   user: User | null;
-  token: string | null;
+  // [K-03 FIX] Token dihapus dari state — autentikasi kini sepenuhnya mengandalkan HttpOnly cookie.
+  // Token tidak pernah dapat diakses oleh JavaScript, sehingga aman dari serangan XSS.
   isLoading: boolean;
-  login: (user: User, token: string) => void;
+  login: (user: User) => void;
   logout: () => Promise<void> | void;
   setLoading: (loading: boolean) => void;
 }

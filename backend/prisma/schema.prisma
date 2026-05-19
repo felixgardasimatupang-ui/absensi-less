@@ -2,6 +2,19 @@ generator client {
   provider = "prisma-client-js"
 }
 
+// ===================================================================
+// [S-01] DATABASE: SQLite (Development) → PostgreSQL (Production)
+//
+// Untuk DEVELOPMENT: gunakan SQLite agar setup mudah tanpa Docker DB.
+// Untuk PRODUCTION:  ganti provider ke "postgresql" dan set DATABASE_URL
+//                    ke URL PostgreSQL (Railway, Render, Supabase, dll.)
+//
+// Instruksi migrasi ke PostgreSQL:
+//   1. Ganti provider di bawah menjadi "postgresql"
+//   2. Update DATABASE_URL di .env ke connection string PostgreSQL
+//   3. Jalankan: npx prisma migrate dev --name init
+//   4. Jalankan: npx prisma generate
+// ===================================================================
 datasource db {
   provider = "sqlite"
   url      = env("DATABASE_URL")
@@ -28,12 +41,14 @@ model User {
   tokenVersion Int      @default(0)
   createdAt    DateTime @default(now())
 
-  attendances Attendance[]
-  sessions    Session[]
+  attendances   Attendance[]
+  sessions      Session[]
+  // [S-03] Relasi ke refresh tokens (digunakan saat implementasi refresh token di Sprint 2)
+  refreshTokens RefreshToken[]
 }
 
 model Session {
-  id        String   @id @default(uuid()) // Added @default(uuid()) for auto-generation safeguard
+  id        String   @id @default(uuid())
   tutorId   String
   classInfo String
   timestamp DateTime @default(now())
@@ -55,4 +70,23 @@ model Attendance {
   student User    @relation(fields: [studentId], references: [id])
 
   @@unique([sessionId, studentId])
+}
+
+// ===================================================================
+// [S-03 GROUNDWORK] Refresh Token Model
+// Digunakan untuk implementasi access token pendek (15 menit) +
+// refresh token panjang (7 hari) di Sprint 2.
+// Saat ini model sudah ada di schema sebagai persiapan.
+// ===================================================================
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
 }

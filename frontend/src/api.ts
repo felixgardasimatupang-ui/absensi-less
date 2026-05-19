@@ -1,3 +1,7 @@
+// [K-03 FIX] Cookie-Only API Client
+// Semua request menggunakan `withCredentials: true` sehingga browser secara otomatis
+// mengirimkan HttpOnly cookie pada setiap request. Tidak ada Authorization header manual.
+
 import axios from 'axios';
 import { useAuthStore } from './store';
 import toast from 'react-hot-toast';
@@ -5,19 +9,16 @@ import { API_URL } from './config';
 
 const api = axios.create({
   baseURL: API_URL,
-  withCredentials: true,
+  withCredentials: true, // Browser mengirim HttpOnly cookie secara otomatis
   headers: {
     'Content-Type': 'application/json',
   },
 });
 
-// Request Interceptor: Add JWT token to every request automatically
+// [K-03 FIX] Request Interceptor: TIDAK lagi menyuntikkan Authorization header secara manual.
+// Autentikasi ditangani sepenuhnya oleh HttpOnly cookie yang dikirim browser.
 api.interceptors.request.use(
   (config) => {
-    const token = useAuthStore.getState().token;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
     return config;
   },
   (error) => {
@@ -25,7 +26,7 @@ api.interceptors.request.use(
   }
 );
 
-// Response Interceptor: Auto-logout on 401 unauthenticated response and global error toaster
+// Response Interceptor: Auto-logout saat sesi berakhir (HTTP 401) + tampil toast error global
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -33,13 +34,14 @@ api.interceptors.response.use(
     const errorMessage = error.response?.data?.error || error.message || 'Terjadi kesalahan pada sistem.';
 
     if (status === 401) {
+      // Cookie sudah invalid/expired — bersihkan state user di frontend
       useAuthStore.getState().logout();
       toast.error('Sesi Anda telah berakhir. Silakan login kembali.');
-    } else {
-      // Display global visual toast notification for any API errors
+    } else if (status !== undefined) {
+      // Tampilkan error spesifik dari API untuk status error lainnya
       toast.error(errorMessage);
     }
-    
+
     return Promise.reject(error);
   }
 );

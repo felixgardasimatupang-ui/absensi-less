@@ -6,6 +6,18 @@ import api from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
 import { StackNavigationProp } from '@react-navigation/stack';
 import { AuthStackParamList } from '../../types/navigation';
+import { z } from 'zod';
+
+// Schema for runtime validation of login response
+const LoginResponseSchema = z.object({
+  user: z.object({
+    id: z.string(),
+    name: z.string(),
+    email: z.string().email(),
+    role: z.enum(['tutor', 'student', 'admin'])
+  }),
+  token: z.string()
+});
 
 type NavigationProp = StackNavigationProp<AuthStackParamList, 'Login'>;
 
@@ -25,17 +37,23 @@ export default function LoginScreen() {
     }
     
     setLoading(true);
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      const { user, token } = response.data;
-      
-      login(user, token);
-    } catch (error: any) {
-      const errorMsg = error.response?.data?.error || error.message || 'Terjadi kesalahan saat masuk.';
-      Alert.alert('Masuk Gagal', errorMsg);
-    } finally {
-      setLoading(false);
-    }
+     try {
+       const response = await api.post('/auth/login', { email, password });
+       const { user, token } = LoginResponseSchema.parse(response.data);
+       
+       login(user, token);
+     } catch (error: any) {
+       if (error instanceof z.ZodError) {
+         // Handle validation error
+         console.error('Login response validation error:', error.errors);
+         Alert.alert('Masuk Gagal', 'Format respons dari server tidak valid.');
+       } else {
+         const errorMsg = error.response?.data?.error || error.message || 'Terjadi kesalahan saat masuk.';
+         Alert.alert('Masuk Gagal', errorMsg);
+       }
+     } finally {
+       setLoading(false);
+     }
   };
 
   return (

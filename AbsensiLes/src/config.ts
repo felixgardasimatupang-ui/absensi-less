@@ -1,1 +1,7 @@
-export const API_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:3000/api';
+const apiUrl = process.env.EXPO_PUBLIC_API_URL;
+
+if (!apiUrl) {
+  throw new Error('EXPO_PUBLIC_API_URL belum dikonfigurasi.');
+}
+
+export const API_URL = apiUrl;

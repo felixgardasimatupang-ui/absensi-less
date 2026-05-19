@@ -66,7 +66,9 @@ export default function App() {
     setErrorMsg('');
     try {
       const response = await api.post('/auth/login', { email, password });
-      login(response.data.user, response.data.token);
+      // [K-03 FIX] Hanya simpan data user ke state — token ditangani oleh HttpOnly cookie backend.
+      // Cookie di-set secara otomatis oleh browser dari header Set-Cookie response.
+      login(response.data.user);
       triggerToast(`Selamat datang kembali, ${response.data.user.name}!`);
       // Clear forms
       setEmail('');
@@ -303,7 +305,33 @@ export default function App() {
 // ==========================================
 // 1. ADMIN DASHBOARD COMPONENT
 // ==========================================
+
+// [S-04 FIX] Tipe data statistik admin dari API
+interface AdminStats {
+  totalStudents: number;
+  totalTutors: number;
+  attendanceRate: number;
+  hadirCount: number;
+  totalAttendance: number;
+}
+
 function AdminDashboard() {
+  const [stats, setStats] = useState<AdminStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
+
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const response = await api.get('/admin/stats');
+        setStats(response.data);
+      } catch (err) {
+        console.error('Gagal mengambil statistik admin:', err);
+        setStatsError(true);
+      }
+    };
+    fetchStats();
+  }, []);
+
   return (
     <div className="glass-card" style={{ padding: '40px', textAlign: 'center' }}>
       <Home size={48} color="var(--primary-hover)" style={{ marginBottom: '16px' }} />
@@ -311,20 +339,50 @@ function AdminDashboard() {
       <p style={{ color: 'var(--text-secondary)', maxWidth: '500px', margin: '0 auto', fontSize: '14px', lineHeight: '1.6' }}>
         Sebagai Administrator, Anda dapat memantau seluruh aktivitas tutor dan siswa secara terpusat, mengelola akun pengguna, dan mengunduh laporan rekap absensi berkala.
       </p>
+      {/* [S-04 FIX] Statistik real-time dari API /admin/stats — bukan data hardcoded */}
       <div className="grid-3" style={{ marginTop: '32px' }}>
         <div className="stat-box">
-          <div className="stat-val">24</div>
+          <div className="stat-val">
+            {stats === null && !statsError ? (
+              <span style={{ fontSize: '20px', color: 'var(--text-muted)' }}>...</span>
+            ) : statsError ? (
+              <span style={{ fontSize: '16px', color: 'var(--danger)' }}>!</span>
+            ) : (
+              stats!.totalStudents
+            )}
+          </div>
           <div className="stat-lbl">Total Siswa Terdaftar</div>
         </div>
         <div className="stat-box">
-          <div className="stat-val">5</div>
+          <div className="stat-val">
+            {stats === null && !statsError ? (
+              <span style={{ fontSize: '20px', color: 'var(--text-muted)' }}>...</span>
+            ) : statsError ? (
+              <span style={{ fontSize: '16px', color: 'var(--danger)' }}>!</span>
+            ) : (
+              stats!.totalTutors
+            )}
+          </div>
           <div className="stat-lbl">Tutor Pengajar</div>
         </div>
         <div className="stat-box">
-          <div className="stat-val">98%</div>
+          <div className="stat-val">
+            {stats === null && !statsError ? (
+              <span style={{ fontSize: '20px', color: 'var(--text-muted)' }}>...</span>
+            ) : statsError ? (
+              <span style={{ fontSize: '16px', color: 'var(--danger)' }}>!</span>
+            ) : (
+              `${stats!.attendanceRate}%`
+            )}
+          </div>
           <div className="stat-lbl">Tingkat Kehadiran Bulan Ini</div>
         </div>
       </div>
+      {statsError && (
+        <p style={{ color: 'var(--danger)', fontSize: '12px', marginTop: '16px' }}>
+          Gagal memuat statistik. Pastikan backend berjalan.
+        </p>
+      )}
     </div>
   );
 }

@@ -2,13 +2,31 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Alert } from 'react-native';
 import { Text, Button, Surface, ActivityIndicator } from 'react-native-paper';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import * as Location from 'expo-location';
 import { attendanceService } from '../../services/attendanceService';
 import { getCurrentVerifiedLocation } from '../../utils/locationHelper';
+import LocationPermissionScreen from './LocationPermissionScreen';
 
 export default function ScanQRScreen() {
   const [permission, requestPermission] = useCameraPermissions();
+  const [locationPermissionShown, setLocationPermissionShown] = useState(false);
   const [scanned, setScanned] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const requestLocationPermission = async () => {
+    setLocationPermissionShown(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Izin lokasi ditolak', 'Aplikasi ini membutuhkan akses lokasi untuk memvalidasi kehadiran Anda. Silakan izinkan akses lokasi di pengaturan.');
+      }
+    } catch (error) {
+      console.error('Error requesting location permission:', error);
+      Alert.alert('Error', 'Gagal meminta izin lokasi');
+    } finally {
+      setLocationPermissionShown(false);
+    }
+  };
 
   if (!permission) {
     return (
@@ -26,6 +44,18 @@ export default function ScanQRScreen() {
           Berikan Akses Kamera
         </Button>
       </View>
+    );
+  }
+
+  // Show location permission screen first
+  if (!locationPermissionShown) {
+    return (
+      <LocationPermissionScreen
+        onRequestPermission={requestLocationPermission}
+        onPermissionGranted={() => {
+          // Proceed to location verification after permission granted
+        }}
+      />
     );
   }
 

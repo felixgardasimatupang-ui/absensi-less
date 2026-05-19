@@ -1,6 +1,27 @@
 version: '3.8'
 
+# ===================================================================
+# [S-01 FIX] Docker Compose — Development & Production Ready
+#
+# MODE DEVELOPMENT (default):
+#   docker compose up backend
+#   Menggunakan SQLite (file lokal). Setup cepat, tidak perlu DB container.
+#
+# MODE PRODUCTION (dengan PostgreSQL):
+#   docker compose --profile production up
+#   Menggunakan PostgreSQL container dengan volume persisten.
+#
+# Instruksi migrasi ke PostgreSQL:
+#   1. Ganti DATABASE_URL backend ke postgresql connection string
+#   2. Ganti prisma schema provider ke "postgresql"
+#   3. Jalankan: docker compose --profile production up
+#   4. Di container backend, jalankan: npx prisma migrate deploy
+# ===================================================================
+
 services:
+  # ------------------------------------------------------------------
+  # BACKEND (Development: SQLite | Production: PostgreSQL)
+  # ------------------------------------------------------------------
   backend:
     image: node:22-alpine
     container_name: absensiles_backend
@@ -10,7 +31,65 @@ services:
       - '3000:3000'
     environment:
       PORT: 3000
-      JWT_SECRET: change-this-secret-in-production
+      NODE_ENV: development
+      JWT_SECRET: change-this-secret-in-production-min-64-chars
+      # Development: SQLite (ganti ke postgresql URL saat production)
       DATABASE_URL: file:./prisma/dev.db
+      CORS_ORIGINS: http://localhost:5173
     volumes:
       - .:/app
+    restart: unless-stopped
+
+  # ------------------------------------------------------------------
+  # [S-01] POSTGRESQL — Aktifkan dengan: docker compose --profile production up
+  # Untuk production, ubah DATABASE_URL backend ke URL di bawah
+  # ------------------------------------------------------------------
+  postgres:
+    profiles:
+      - production
+    image: postgres:16-alpine
+    container_name: absensiles_postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-absensiles_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-absensiles_pass_change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-absensiles_db}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U absensiles_user -d absensiles_db']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ------------------------------------------------------------------
+  # BACKEND PRODUCTION — Menggunakan PostgreSQL
+  # Aktifkan dengan: docker compose --profile production up
+  # ------------------------------------------------------------------
+  backend-prod:
+    profiles:
+      - production
+    image: node:22-alpine
+    container_name: absensiles_backend_prod
+    working_dir: /app/backend
+    command: sh -c "npm ci && npx prisma generate && npx prisma migrate deploy && node dist/server.js"
+    ports:
+      - '3001:3000'
+    environment:
+      PORT: 3000
+      NODE_ENV: production
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET wajib diisi di .env untuk production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-absensiles_user}:${POSTGRES_PASSWORD:-absensiles_pass_change_me}@postgres:5432/${POSTGRES_DB:-absensiles_db}
+      CORS_ORIGINS: ${CORS_ORIGINS:?CORS_ORIGINS wajib diisi untuk production}
+    volumes:
+      - .:/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
