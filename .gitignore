@@ -11,4 +11,5 @@ build/
 .expo/
 *.db
 *.sqlite
+*.tsbuildinfo
 
