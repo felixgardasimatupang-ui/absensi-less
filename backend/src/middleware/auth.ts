@@ -40,13 +40,10 @@ export const extractTokenFromRequest = (req: Request) => {
 // Kenapa penting: Jika token dicuri, window pencurian hanya 1 jam,
 // bukan 30 hari. Token version system memastikan logout tetap efektif.
 // ===================================================================
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const signAuthToken = (payload: Omit<AuthTokenPayload, 'iat' | 'exp'>) =>
   jwt.sign(payload, process.env.JWT_SECRET as string, {
-    // Cast to `any` karena jsonwebtoken v9 menggunakan tipe StringValue internal
-    // yang tidak kompatibel dengan plain string dari env var.
-    // Nilai valid: '15m', '1h', '30d', dll.
-    expiresIn: (process.env.JWT_EXPIRY || '1h') as any, // eslint-disable-line @typescript-eslint/no-explicit-any
+    // Cast ke tipe standard SignOptions['expiresIn'] dari jsonwebtoken agar type-safe
+    expiresIn: (process.env.JWT_EXPIRY || '1h') as jwt.SignOptions['expiresIn'],
   });
 
 // ===================================================================
