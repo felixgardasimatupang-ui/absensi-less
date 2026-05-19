@@ -383,6 +383,7 @@ $ npm test
 [ ] Export Excel laporan absensi
 [ ] Dokumentasi API lengkap (Swagger/OpenAPI)
 [ ] Endpoint admin: GET /admin/users, GET /admin/sessions
+[✅] Telemetry untuk kegagalan logout / auth bootstrap
 ```
 
 ### 📅 Phase 4 — PRODUCTION READY (Sprint 3)
@@ -393,6 +394,7 @@ $ npm test
 [ ] Monitoring dengan Sentry
 [ ] Load testing dengan k6 (100 concurrent users)
 [ ] App Store / Play Store submission
+[✅] Dokumentasi environment dev/staging/prod yang lebih eksplisit
 ```
 
 ---

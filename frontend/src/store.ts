@@ -7,6 +7,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { AuthState } from './types';
 import { API_URL } from './config';
+import { telemetry } from './utils/telemetry';
 
 export const useAuthStore = create<AuthState>()(
   persist(
@@ -26,6 +27,8 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           console.error('Server logout request failed (non-critical):', error);
+          // Log telemetry for logout failure
+          telemetry.logoutFailure(error);
         } finally {
           // Bersihkan state lokal setelah logout
           set({ user: null });

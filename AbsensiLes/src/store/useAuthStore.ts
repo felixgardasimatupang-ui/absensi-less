@@ -4,6 +4,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { AuthState } from '../types';
 import { API_URL } from '../config';
+import { telemetry } from '../utils/telemetry';
 
 export const useAuthStore = create<AuthState & {
   isCheckingSession: boolean;
@@ -24,6 +25,8 @@ export const useAuthStore = create<AuthState & {
           });
         } catch (error) {
           console.error('Failed to logout on server:', error);
+          // Log telemetry for logout failure
+          telemetry.logoutFailure(error);
         } finally {
           set({ user: null, token: null });
         }
@@ -49,6 +52,8 @@ export const useAuthStore = create<AuthState & {
           }
         } catch (error) {
           console.error('Session check failed:', error);
+          // Log telemetry for auth bootstrap failure
+          telemetry.authBootstrapFailure(error);
           set({ user: null, token: null, isCheckingSession: false });
         }
       },
